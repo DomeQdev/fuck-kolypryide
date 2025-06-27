@@ -1,0 +1,37 @@
+{
+    "name": "kolypryide-gtfs",
+    "version": "1.0.0",
+    "main": "dist/index.js",
+    "files": [
+        "dist",
+        "package.json"
+    ],
+    "bin": {
+        "fuck-kolypryide": "dist/index.js"
+    },
+    "license": "UNLICENSED",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DomeQdev/fuck-kolypryide"
+    },
+    "devDependencies": {
+        "@types/cli-progress": "^3.11.6",
+        "@types/jszip": "^3.4.0",
+        "@types/node": "^24.0.5",
+        "@types/papaparse": "^5.3.16",
+        "@types/prompts": "^2.4.9",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.8.3"
+    },
+    "dependencies": {
+        "axios": "^1.10.0",
+        "chalk": "^5.4.1",
+        "cli-progress": "^3.12.0",
+        "hpagent": "^1.2.0",
+        "jszip": "^3.10.1",
+        "ora": "^8.2.0",
+        "p-limit": "^6.2.0",
+        "papaparse": "^5.5.3",
+        "prompts": "^2.4.2"
+    }
+}
