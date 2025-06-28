@@ -1,4 +1,4 @@
-import { AxiosInstance } from "axios";
+import { AxiosError, AxiosInstance } from "axios";
 import pLimit, { LimitFunction } from "p-limit";
 import ora from "ora";
 import chalk from "chalk";
@@ -21,31 +21,44 @@ async function fetchAllTripIds(
     );
     progressBar.start(allStops.length * dates.length, 0);
 
-    const tasks = allStops.flatMap((stop) =>
-        dates.map((date) =>
-            limit(async () => {
-                try {
-                    const response = await apiClient.get(`/api/timetables/${stop[ERawStop.id]}?date=${date}`);
-                    const departures: Departure[] = response.data.departures || [];
+    const failedStopSchedules: string[] = [];
 
-                    for (const dep of departures) {
-                        const tripIdStr = dep.trip_id.toString();
-                        if (!tripCalendar.has(tripIdStr)) {
-                            tripCalendar.set(tripIdStr, new Set());
+    await Promise.all(
+        allStops.flatMap((stop) =>
+            dates.map((date) =>
+                limit(async () => {
+                    try {
+                        const response = await apiClient.get(
+                            `/api/timetables/${stop[ERawStop.id]}?date=${date}`
+                        );
+                        const departures: Departure[] = response.data.departures || [];
+
+                        for (const dep of departures) {
+                            const tripIdStr = dep.trip_id.toString();
+                            if (!tripCalendar.has(tripIdStr)) {
+                                tripCalendar.set(tripIdStr, new Set());
+                            }
+                            tripCalendar.get(tripIdStr)!.add(date.replace(/-/g, ""));
                         }
-                        tripCalendar.get(tripIdStr)!.add(date.replace(/-/g, ""));
+                    } catch (e) {
+                        failedStopSchedules.push(
+                            `${stop[ERawStop.name]} ${stop[ERawStop.code]} (${stop[ERawStop.id]}): ${date}`
+                        );
                     }
-                } catch (e) {
-                    console.error(`Błąd podczas pobierania rozkładów ${stop[ERawStop.id]} (${date}):`, e);
-                }
 
-                progressBar.increment();
-            })
+                    progressBar.increment();
+                })
+            )
         )
     );
 
-    await Promise.all(tasks);
     progressBar.stop();
+
+    if (failedStopSchedules.length > 0) {
+        console.error(chalk.red("Błędy podczas pobierania rozkładów dla niektórych przystanków:"));
+        failedStopSchedules.forEach((error) => console.error(chalk.yellow(`- ${error}`)));
+    }
+
     return tripCalendar;
 }
 
@@ -61,20 +74,29 @@ async function fetchAllTripDetails(
     );
     progressBar.start(tripIds.length, 0);
 
-    const tasks = tripIds.map((tripId) =>
-        limit(async () => {
-            try {
-                const response = await apiClient.get(`/api/trip/${tripId}/0`);
-                allTripsDetails.push({ ...response.data, trip_id: tripId });
-            } catch (e) {
-                console.error(`Błąd podczas pobierania szczegółów kursu ${tripId}:`, e);
-            }
-            progressBar.increment();
-        })
+    const failedTripDetails: string[] = [];
+
+    await Promise.all(
+        tripIds.map((tripId) =>
+            limit(async () => {
+                try {
+                    const response = await apiClient.get(`/api/trip/${tripId}/0`);
+                    allTripsDetails.push({ ...response.data, trip_id: tripId });
+                } catch (e) {
+                    failedTripDetails.push(tripId);
+                }
+                progressBar.increment();
+            })
+        )
     );
 
-    await Promise.all(tasks);
     progressBar.stop();
+
+    if (failedTripDetails.length > 0) {
+        console.error(chalk.red("Błędy podczas pobierania szczegółów kursów:"));
+        failedTripDetails.forEach((tripId) => console.error(chalk.yellow(`- ${tripId}`)));
+    }
+
     return allTripsDetails;
 }
 
@@ -92,7 +114,7 @@ export async function runScrapingPipeline(
         spinner.succeed(`Pobrano ${allStops.length} przystanków.`);
     } catch (e) {
         spinner.fail("Błąd podczas pobierania przystanków.");
-        console.error(e);
+        console.error((e as AxiosError).response?.status);
         return null;
     }
 
