@@ -23,23 +23,12 @@ export async function generateGtfs(data: ScrapedData) {
         ])
     );
 
-    zip.file(
-        "stops.txt",
-        Papa.unparse(
-            data.stops.map((stop) => ({
-                stop_id: stop[ERawStop.id],
-                stop_code: stop[ERawStop.code],
-                stop_name: stop[ERawStop.name],
-                stop_lon: stop[ERawStop.lon] / 1e6,
-                stop_lat: stop[ERawStop.lat] / 1e6,
-            }))
-        )
-    );
-
     const routes = new Map<string, Object>();
     const trips: Object[] = [];
     const stopTimes: Object[] = [];
     const calendarDates: Object[] = [];
+
+    const usedStops = new Set<string>();
 
     for (const tripDetail of data.trips) {
         const routeId = tripDetail.line.name;
@@ -71,7 +60,6 @@ export async function generateGtfs(data: ScrapedData) {
 
         let lastDepartureSeconds = -1;
         tripDetail.times.forEach((stopTime, index) => {
-            const stopId = stopTime.place_id.split(":")[1];
             let departureSeconds = timeToSeconds(stopTime.departure_time);
 
             if (departureSeconds < lastDepartureSeconds) {
@@ -79,15 +67,32 @@ export async function generateGtfs(data: ScrapedData) {
             }
             lastDepartureSeconds = departureSeconds;
 
+            usedStops.add(stopTime.place_id);
+
             stopTimes.push({
                 trip_id: tripId,
                 arrival_time: secondsToTime(departureSeconds),
                 departure_time: secondsToTime(departureSeconds),
-                stop_id: stopId,
+                stop_id: stopTime.place_id,
                 stop_sequence: index + 1,
             });
         });
     }
+
+    zip.file(
+        "stops.txt",
+        Papa.unparse(
+            data.stops
+                .filter((stop) => usedStops.has(stop[ERawStop.id]))
+                .map((stop) => ({
+                    stop_id: stop[ERawStop.id],
+                    stop_code: stop[ERawStop.code],
+                    stop_name: stop[ERawStop.name],
+                    stop_lon: stop[ERawStop.lon] / 1e6,
+                    stop_lat: stop[ERawStop.lat] / 1e6,
+                }))
+        )
+    );
 
     zip.file("routes.txt", Papa.unparse(Array.from(routes.values())));
     zip.file("trips.txt", Papa.unparse(trips));
